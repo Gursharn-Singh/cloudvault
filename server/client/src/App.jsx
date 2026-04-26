@@ -4,13 +4,16 @@ function App() {
   const [token, setToken] = useState("");
   const [file, setFile] = useState(null);
   const [files, setFiles] = useState([]);
+  const [view, setView] = useState("files");
+  const [dark, setDark] = useState(false);
 
+  const theme = dark ? darkTheme : lightTheme;
+
+  // LOGIN
   const login = async () => {
     const res = await fetch("http://localhost:5000/api/auth/login", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         email: "test@test.com",
         password: "123456"
@@ -22,42 +25,33 @@ function App() {
     alert("Logged in ✅");
   };
 
+  const getFiles = async () => {
+    const res = await fetch("http://localhost:5000/api/files/my-files", {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    const data = await res.json();
+    setFiles(data.files);
+  };
+
   const uploadFile = async () => {
+    if (!file) return alert("Select file");
+
     const formData = new FormData();
     formData.append("file", file);
 
-    const res = await fetch("http://localhost:5000/api/files/upload", {
+    await fetch("http://localhost:5000/api/files/upload", {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`
-      },
+      headers: { Authorization: `Bearer ${token}` },
       body: formData
     });
 
-    const data = await res.json();
-    alert("Uploaded: " + data.file);
     getFiles();
-  };
-
-  const getFiles = async () => {
-    const res = await fetch("http://localhost:5000/api/files/my-files", {
-      headers: {
-        Authorization: `Bearer ${token}`
-      }
-    });
-
-    const data = await res.json();
-    setFiles(data.files);
   };
 
   const downloadFile = async (filename) => {
     const res = await fetch(
       `http://localhost:5000/api/files/download/${filename}`,
-      {
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
-      }
+      { headers: { Authorization: `Bearer ${token}` } }
     );
 
     const blob = await res.blob();
@@ -74,61 +68,112 @@ function App() {
       `http://localhost:5000/api/files/delete/${filename}`,
       {
         method: "DELETE",
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
+        headers: { Authorization: `Bearer ${token}` }
       }
     );
-
     getFiles();
   };
 
+  const togglePublic = async (filename) => {
+    await fetch(
+      `http://localhost:5000/api/files/toggle/${filename}`,
+      {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` }
+      }
+    );
+    getFiles();
+  };
+
+  const shareFile = (filename) => {
+    const link = `http://localhost:5000/api/files/public/${filename}`;
+    navigator.clipboard.writeText(link);
+    alert("Link copied 🔗");
+  };
+
+  const getFileIcon = (name) => {
+    if (name.endsWith(".png") || name.endsWith(".jpg")) return "🖼️";
+    if (name.endsWith(".pdf")) return "📄";
+    if (name.endsWith(".mp4")) return "🎥";
+    return "📁";
+  };
+
   return (
-    <div style={styles.container}>
-      <div style={styles.card}>
-        <h1 style={styles.title}>☁️ CloudVault</h1>
+    <div style={{ ...styles.container, background: theme.bg }}>
+      
+      {/* SIDEBAR */}
+      <div style={{ ...styles.sidebar, background: theme.sidebar }}>
+        <h2>☁️ CloudVault</h2>
 
-        <button style={styles.buttonPrimary} onClick={login}>
-          Login
+        <button style={styles.btn} onClick={login}>Login</button>
+
+        <button style={styles.btn} onClick={() => { setView("files"); getFiles(); }}>
+          📂 My Files
         </button>
 
-        <div style={styles.uploadSection}>
-          <input
-            type="file"
-            onChange={(e) => setFile(e.target.files[0])}
-          />
-          <button style={styles.buttonPrimary} onClick={uploadFile}>
-            Upload
-          </button>
-        </div>
-
-        <button style={styles.buttonSecondary} onClick={getFiles}>
-          Show Files
+        <button style={styles.btn} onClick={() => setView("upload")}>
+          ⬆️ Upload
         </button>
 
-        <ul style={styles.fileList}>
-          {files.map((f, i) => (
-            <li key={i} style={styles.fileItem}>
-              <span>{f}</span>
+        <hr />
 
-              <div>
-                <button
-                  style={styles.smallBtn}
-                  onClick={() => downloadFile(f)}
-                >
-                  ⬇️
-                </button>
+        <button style={styles.btn} onClick={() => setDark(!dark)}>
+          {dark ? "☀️ Light" : "🌙 Dark"}
+        </button>
+      </div>
 
-                <button
-                  style={{ ...styles.smallBtn, backgroundColor: "#ff4d4d" }}
-                  onClick={() => deleteFile(f)}
+      {/* MAIN */}
+      <div style={{ ...styles.main, color: theme.text }}>
+        
+        {view === "upload" && (
+          <div>
+            <h2>Upload File</h2>
+            <input type="file" onChange={(e) => setFile(e.target.files[0])} />
+            <button style={styles.primary} onClick={uploadFile}>Upload</button>
+          </div>
+        )}
+
+        {view === "files" && (
+          <div>
+            <h2>My Files</h2>
+
+            <ul style={styles.list}>
+              {files.map((f, i) => (
+                <li
+                  key={i}
+                  style={{
+                    ...styles.item,
+                    background: theme.card
+                  }}
                 >
-                  🗑️
-                </button>
-              </div>
-            </li>
-          ))}
-        </ul>
+                  <div style={styles.left}>
+                    <span>{getFileIcon(f.name)}</span>
+                    <div>
+                      <div>{f.name}</div>
+                      <small>
+                        {f.size} • {new Date(f.date).toLocaleString()}
+                      </small>
+                    </div>
+                  </div>
+
+                  <div style={styles.right}>
+                    <span style={{
+                      color: f.isPublic ? "limegreen" : "tomato"
+                    }}>
+                      {f.isPublic ? "Public 🌐" : "Private 🔒"}
+                    </span>
+
+                    <button style={styles.iconBtn} onClick={() => downloadFile(f.name)}>⬇️</button>
+                    <button style={styles.iconBtn} onClick={() => shareFile(f.name)}>🔗</button>
+                    <button style={styles.iconBtn} onClick={() => togglePublic(f.name)}>🔄</button>
+                    <button style={styles.iconBtn} onClick={() => deleteFile(f.name)}>🗑️</button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
       </div>
     </div>
   );
@@ -136,67 +181,79 @@ function App() {
 
 const styles = {
   container: {
-    height: "100vh",
-    background: "#f4f6f8",
     display: "flex",
-    justifyContent: "center",
+    height: "100vh",
+    fontFamily: "Arial"
+  },
+  sidebar: {
+    width: "220px",
+    padding: "20px",
+    display: "flex",
+    flexDirection: "column",
+    gap: "10px",
+    color: "#fff"
+  },
+  main: {
+    flex: 1,
+    padding: "20px"
+  },
+  list: {
+    listStyle: "none",
+    padding: 0
+  },
+  item: {
+    display: "flex",
+    justifyContent: "space-between",
+    padding: "12px",
+    marginBottom: "10px",
+    borderRadius: "8px",
+    transition: "0.2s",
+    boxShadow: "0 2px 6px rgba(0,0,0,0.1)"
+  },
+  left: {
+    display: "flex",
+    gap: "10px"
+  },
+  right: {
+    display: "flex",
+    gap: "6px",
     alignItems: "center"
   },
-  card: {
-    background: "#fff",
-    padding: "30px",
-    borderRadius: "12px",
-    boxShadow: "0 4px 20px rgba(0,0,0,0.1)",
-    width: "400px",
-    textAlign: "center"
+  btn: {
+    padding: "8px",
+    border: "none",
+    borderRadius: "6px",
+    cursor: "pointer"
   },
-  title: {
-    marginBottom: "20px"
-  },
-  buttonPrimary: {
-    padding: "10px 20px",
-    margin: "10px",
+  primary: {
+    marginTop: "10px",
+    padding: "10px 15px",
     background: "#4CAF50",
     color: "#fff",
     border: "none",
     borderRadius: "6px",
     cursor: "pointer"
   },
-  buttonSecondary: {
-    padding: "8px 16px",
-    marginTop: "10px",
-    background: "#2196F3",
-    color: "#fff",
-    border: "none",
-    borderRadius: "6px",
-    cursor: "pointer"
-  },
-  uploadSection: {
-    marginTop: "15px"
-  },
-  fileList: {
-    listStyle: "none",
-    padding: 0,
-    marginTop: "15px"
-  },
-  fileItem: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    background: "#f1f1f1",
-    padding: "10px",
-    borderRadius: "6px",
-    marginBottom: "8px"
-  },
-  smallBtn: {
-    marginLeft: "5px",
+  iconBtn: {
     padding: "5px 8px",
     border: "none",
-    borderRadius: "4px",
-    background: "#555",
-    color: "#fff",
+    borderRadius: "5px",
     cursor: "pointer"
   }
+};
+
+const lightTheme = {
+  bg: "#f4f6f8",
+  sidebar: "#1f2937",
+  card: "#ffffff",
+  text: "#000"
+};
+
+const darkTheme = {
+  bg: "#111827",
+  sidebar: "#000000",
+  card: "#1f2937",
+  text: "#ffffff"
 };
 
 export default App;

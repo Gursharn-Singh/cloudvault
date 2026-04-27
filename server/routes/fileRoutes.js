@@ -25,9 +25,10 @@ const upload = multer({ storage });
 router.post("/upload", authMiddleware, upload.single("file"), (req, res) => {
   const file = req.file;
 
-  // store metadata
+  // ✅ store metadata WITH userId
   fileDB.push({
     name: file.filename,
+    userId: req.userId,
     isPublic: false
   });
 
@@ -37,28 +38,38 @@ router.post("/upload", authMiddleware, upload.single("file"), (req, res) => {
   });
 });
 
-// 📂 GET FILES
+// 📂 GET USER FILES
 router.get("/my-files", authMiddleware, (req, res) => {
-  const files = fs.readdirSync("uploads");
+  const userFiles = fileDB.filter(f => f.userId === req.userId);
 
-  const fileDetails = files.map((file) => {
-    const stats = fs.statSync(path.join("uploads", file));
+  const fileDetails = userFiles.map((file) => {
+    const filePath = path.join("uploads", file.name);
 
-    const fileMeta = fileDB.find(f => f.name === file);
+    if (!fs.existsSync(filePath)) return null;
+
+    const stats = fs.statSync(filePath);
 
     return {
-      name: file,
+      name: file.name,
       size: (stats.size / 1024).toFixed(2) + " KB",
       date: stats.mtime,
-      isPublic: fileMeta?.isPublic || false
+      isPublic: file.isPublic
     };
-  });
+  }).filter(Boolean);
 
   res.json({ files: fileDetails });
 });
 
-// 📥 DOWNLOAD (PRIVATE)
+// 📥 DOWNLOAD (PRIVATE - only owner)
 router.get("/download/:filename", authMiddleware, (req, res) => {
+  const fileMeta = fileDB.find(
+    f => f.name === req.params.filename && f.userId === req.userId
+  );
+
+  if (!fileMeta) {
+    return res.status(403).json({ message: "Access denied ❌" });
+  }
+
   const filePath = path.join("uploads", req.params.filename);
 
   if (fs.existsSync(filePath)) {
@@ -85,9 +96,11 @@ router.get("/public/:filename", (req, res) => {
   }
 });
 
-// 🔗 TOGGLE PUBLIC/PRIVATE
+// 🔗 TOGGLE PUBLIC/PRIVATE (only owner)
 router.post("/toggle/:filename", authMiddleware, (req, res) => {
-  const fileMeta = fileDB.find(f => f.name === req.params.filename);
+  const fileMeta = fileDB.find(
+    f => f.name === req.params.filename && f.userId === req.userId
+  );
 
   if (!fileMeta) {
     return res.status(404).json({ message: "File not found" });
@@ -101,8 +114,16 @@ router.post("/toggle/:filename", authMiddleware, (req, res) => {
   });
 });
 
-// 🗑️ DELETE
+// 🗑️ DELETE (only owner)
 router.delete("/delete/:filename", authMiddleware, (req, res) => {
+  const fileMeta = fileDB.find(
+    f => f.name === req.params.filename && f.userId === req.userId
+  );
+
+  if (!fileMeta) {
+    return res.status(403).json({ message: "Access denied ❌" });
+  }
+
   const filePath = path.join("uploads", req.params.filename);
 
   if (fs.existsSync(filePath)) {

@@ -2,6 +2,7 @@ import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 import path from "path";
+import { fileURLToPath } from "url";
 
 import authRoutes from "./routes/authRoutes.js";
 import { authMiddleware } from "./middleware/authMiddleware.js";
@@ -11,12 +12,16 @@ dotenv.config();
 
 const app = express();
 
+// ✅ Fix __dirname for ES modules (IMPORTANT)
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 // ✅ Middlewares
 app.use(cors());
 app.use(express.json());
 
-// ✅ Serve uploaded files (for preview 🔥)
-app.use("/uploads", express.static("uploads"));
+// ✅ Serve uploaded files (FIXED PATH 🔥)
+app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
 // ✅ Routes
 app.use("/api/auth", authRoutes);
@@ -35,10 +40,13 @@ app.get("/", (req, res) => {
   res.send("CloudVault backend running 🚀");
 });
 
-// ✅ FIXED PORT (important for deployment)
-const PORT = process.env.PORT || 5000;
+// ✅ Debug route (optional but useful)
+app.get("/debug-path", (req, res) => {
+  res.send(__dirname);
+});
 
 // ✅ Start server
+const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });

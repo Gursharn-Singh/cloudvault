@@ -1,7 +1,7 @@
 import { useState, useMemo, useRef } from "react";
 
 // ─── constants ────────────────────────────────────────────────────────────────
-const API = "http://localhost:5000";
+const API = "https://cloudvault-backend-2wrx.onrender.com";
 
 const EXT_ICONS = {
   png:"🖼",jpg:"🖼",jpeg:"🖼",gif:"🖼",webp:"🖼",

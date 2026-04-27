@@ -3,16 +3,29 @@ import multer from "multer";
 import { authMiddleware } from "../middleware/authMiddleware.js";
 import fs from "fs";
 import path from "path";
+import { fileURLToPath } from "url";
 
 const router = express.Router();
 
-// 🧠 TEMP STORAGE (in-memory database)
+// ✅ Fix __dirname for ES modules
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// ✅ Absolute uploads path (IMPORTANT)
+const uploadPath = path.join(__dirname, "../uploads");
+
+// ✅ Ensure uploads folder exists
+if (!fs.existsSync(uploadPath)) {
+  fs.mkdirSync(uploadPath);
+}
+
+// 🧠 TEMP STORAGE (in-memory DB)
 let fileDB = [];
 
-// storage config
+// ✅ FIXED multer storage
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    cb(null, "uploads/");
+    cb(null, uploadPath); // 🔥 FIX
   },
   filename: (req, file, cb) => {
     cb(null, Date.now() + "-" + file.originalname);
@@ -25,7 +38,6 @@ const upload = multer({ storage });
 router.post("/upload", authMiddleware, upload.single("file"), (req, res) => {
   const file = req.file;
 
-  // ✅ store metadata WITH userId
   fileDB.push({
     name: file.filename,
     userId: req.userId,
@@ -43,7 +55,7 @@ router.get("/my-files", authMiddleware, (req, res) => {
   const userFiles = fileDB.filter(f => f.userId === req.userId);
 
   const fileDetails = userFiles.map((file) => {
-    const filePath = path.join("uploads", file.name);
+    const filePath = path.join(uploadPath, file.name);
 
     if (!fs.existsSync(filePath)) return null;
 
@@ -60,7 +72,7 @@ router.get("/my-files", authMiddleware, (req, res) => {
   res.json({ files: fileDetails });
 });
 
-// 📥 DOWNLOAD (PRIVATE - only owner)
+// 📥 DOWNLOAD (PRIVATE)
 router.get("/download/:filename", authMiddleware, (req, res) => {
   const fileMeta = fileDB.find(
     f => f.name === req.params.filename && f.userId === req.userId
@@ -70,7 +82,7 @@ router.get("/download/:filename", authMiddleware, (req, res) => {
     return res.status(403).json({ message: "Access denied ❌" });
   }
 
-  const filePath = path.join("uploads", req.params.filename);
+  const filePath = path.join(uploadPath, req.params.filename);
 
   if (fs.existsSync(filePath)) {
     res.download(filePath);
@@ -87,7 +99,7 @@ router.get("/public/:filename", (req, res) => {
     return res.status(403).json({ message: "File is private ❌" });
   }
 
-  const filePath = path.join("uploads", req.params.filename);
+  const filePath = path.join(uploadPath, req.params.filename);
 
   if (fs.existsSync(filePath)) {
     res.download(filePath);
@@ -96,7 +108,7 @@ router.get("/public/:filename", (req, res) => {
   }
 });
 
-// 🔗 TOGGLE PUBLIC/PRIVATE (only owner)
+// 🔗 TOGGLE PUBLIC/PRIVATE
 router.post("/toggle/:filename", authMiddleware, (req, res) => {
   const fileMeta = fileDB.find(
     f => f.name === req.params.filename && f.userId === req.userId
@@ -114,7 +126,7 @@ router.post("/toggle/:filename", authMiddleware, (req, res) => {
   });
 });
 
-// 🗑️ DELETE (only owner)
+// 🗑️ DELETE
 router.delete("/delete/:filename", authMiddleware, (req, res) => {
   const fileMeta = fileDB.find(
     f => f.name === req.params.filename && f.userId === req.userId
@@ -124,12 +136,11 @@ router.delete("/delete/:filename", authMiddleware, (req, res) => {
     return res.status(403).json({ message: "Access denied ❌" });
   }
 
-  const filePath = path.join("uploads", req.params.filename);
+  const filePath = path.join(uploadPath, req.params.filename);
 
   if (fs.existsSync(filePath)) {
     fs.unlinkSync(filePath);
 
-    // remove from DB
     fileDB = fileDB.filter(f => f.name !== req.params.filename);
 
     return res.json({ message: "File deleted ✅" });
